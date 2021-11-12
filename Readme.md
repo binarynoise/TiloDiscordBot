@@ -4,6 +4,7 @@ Notifies you when people join or leave voice channels in Discord for all
 Guild where this Bot is a member (needs to be added by an admin).
 
 ## Dependencies
+- currently, only working on Linux with a Gnome based DE (such as Gnome or Cinnamon)
 - depends on [`java-gnome`](http://java-gnome.sourceforge.net/) for the notification
 - other dependencies are automatically pulled by gradle
 
