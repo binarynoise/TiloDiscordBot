@@ -8,7 +8,7 @@
 
 plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    id("org.jetbrains.kotlin.jvm") version "1.5.30"
+    id("org.jetbrains.kotlin.jvm") version "1.6.0"
 
     // Apply the application plugin to add support for building a CLI application in Java.
     application
@@ -28,10 +28,8 @@ dependencies {
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-jdk8:1.5.2")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.5.2")
     
     implementation("com.jessecorbett:diskord-bot:2.1.2-SNAPSHOT")
-    implementation("org.slf4j:slf4j-jdk14:+")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
     
@@ -45,4 +43,8 @@ dependencies {
 application {
     // Define the main class for the application.
     mainClass.set("MainKt")
+}
+
+tasks.run.configure {
+    standardInput = System.`in`
 }
