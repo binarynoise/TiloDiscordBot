@@ -4,7 +4,6 @@ import com.jessecorbett.diskord.api.common.GuildVoiceChannel
 import com.jessecorbett.diskord.api.common.User
 import com.jessecorbett.diskord.api.gateway.events.CreatedGuildVoiceChannel
 import com.jessecorbett.diskord.api.guild.GuildClient
-import com.jessecorbett.diskord.bot.BotBase
 import com.jessecorbett.diskord.bot.bot
 import com.jessecorbett.diskord.bot.events
 import com.jessecorbett.diskord.internal.client.RestClient
@@ -26,11 +25,11 @@ val guildNames: MutableMap<String, String> = sortedMapOf()
 val channelNames: MutableMap<String, String> = sortedMapOf()
 val users: MutableMap<String, User> = sortedMapOf()
 
-//val channelsInGuild: MutableMap<String, MutableSet<String>> = sortedMapOf()
+val channelsInGuild: MutableMap<String, MutableSet<String>> = sortedMapOf()
 val guildForChannel: MutableMap<String, String> = sortedMapOf()
 val channelIsAfk: MutableMap<String, Boolean> = sortedMapOf()
 
-//val usersInVoiceChannel: MutableMap<String, MutableSet<String>> = mutableMapOf()
+val usersInVoiceChannel: MutableMap<String, MutableSet<String>> = mutableMapOf()
 val voiceChannelForUser: MutableMap<String, String> = mutableMapOf()
 
 //lateinit var ownUserID: String
@@ -44,11 +43,12 @@ fun guildClient(id: String) = guildClients.getOrPut(id) { GuildClient(id, restCl
 //val channelClients: MutableMap<String, ChannelClient> = sortedMapOf()
 //fun channelClient(id: String) = channelClients.getOrPut(id) { ChannelClient(id, restClient) }
 
+@ExperimentalCoroutinesApi
 suspend fun main(): Unit = coroutineScope {
     launch(Dispatchers.IO) {
-        val runningInteractively = System.getenv("RUNNING_INTERACTIVELY")  == "0" // see start.sh
+        val runningInteractively = System.getenv("RUNNING_INTERACTIVELY") == "0" // see start.sh
         if (runningInteractively) {
-            logger.info { "write exit, quit or stop to shut down the server. Don't use Ctrl+C" }
+            logger.info { "write exit, quit or stop to shut down the server" }
             while (isActive) {
                 when (readlnOrNull()) {
                     null, "exit", "quit", "stop" -> break
@@ -58,13 +58,22 @@ suspend fun main(): Unit = coroutineScope {
         }
     }
     
-    launch {
+    fun CoroutineScope.startBotAsync() = async {
         bot(BOT_TOKEN) {
 //            bot = this
             events {
                 onReady {
                     logger.info { "started and ready" }
 //                    ownUserID = it.user.id
+                    Runtime.getRuntime().addShutdownHook(Thread {
+                        runBlocking {
+                            logger.info { "shutting down" }
+                            coroutineScope {
+                                shutdown()
+                            }
+                            logger.info { "bot shut down" }
+                        }
+                    })
                 }
                 
                 onGuildCreate { guild ->
@@ -72,10 +81,13 @@ suspend fun main(): Unit = coroutineScope {
                     
                     guildNames[guild.id] = guild.name
                     
+                    clearGuild(guild.id)
+                    
                     val channels = guild.channels?.filterIsInstance<CreatedGuildVoiceChannel>() ?: emptyList()
+                    
                     channels.forEach { channel ->
                         channelNames[channel.id] = channel.name
-//                        channelsInGuild.getOrCreate(guild.id).add(channel.id)
+                        channelsInGuild.getOrCreate(guild.id).add(channel.id)
                         guildForChannel[channel.id] = guild.id
                         channelIsAfk[channel.id] = channel.id == guild.afkChannelId
                     }
@@ -84,7 +96,7 @@ suspend fun main(): Unit = coroutineScope {
                         logger.info { "onGuildCreate voiceStates: $voiceState" }
                         val (_, channelId, userId) = voiceState
                         if (channelId != null) {
-//                            usersInVoiceChannel.getOrCreate(channelId).add(userId)
+                            usersInVoiceChannel.getOrCreate(channelId).add(userId)
                             voiceChannelForUser[userId] = channelId
                         }
                     }
@@ -105,11 +117,19 @@ suspend fun main(): Unit = coroutineScope {
                     guildNames[guild.id] = guild.name
                 }
                 
+                onGuildDelete { guild ->
+                    val guildId = guild.guildId
+                    logger.info { "onGuildDelete ${guildNames[guildId]}" }
+                    
+                    clearGuild(guildId)
+                    printUsersInChannels()
+                }
+                
                 val channelHandler: suspend (Channel) -> Unit = { channel ->
                     if (channel is GuildVoiceChannel) {
                         logger.info { "onChannelCreate/Update ${channel.name}" }
                         channelNames[channel.id] = channel.name
-//                        channelsInGuild.getOrCreate(channel.guildId).add(channel.id)
+                        channelsInGuild.getOrCreate(channel.guildId).add(channel.id)
                         guildForChannel[channel.id] = channel.guildId
                     }
                 }
@@ -136,13 +156,13 @@ suspend fun main(): Unit = coroutineScope {
                     val oldChannelId = voiceChannelForUser[userId]
                     
                     if (oldChannelId != newChannelId) {
-//                        if (oldChannelId != null) {
-//                            usersInVoiceChannel.getOrCreate(oldChannelId).remove(userId)
-//                        }
+                        if (oldChannelId != null) {
+                            usersInVoiceChannel.getOrCreate(oldChannelId).remove(userId)
+                        }
                         
                         if (newChannelId != null) {
                             voiceChannelForUser[userId] = newChannelId
-//                            usersInVoiceChannel.getOrCreate(newChannelId).add(userId)
+                            usersInVoiceChannel.getOrCreate(newChannelId).add(userId)
                         } else {
                             voiceChannelForUser.remove(userId)
                         }
@@ -150,17 +170,36 @@ suspend fun main(): Unit = coroutineScope {
                     }
                 }
             }
-            
-            Runtime.getRuntime().addShutdownHook(Thread {
-                runBlocking {
-                    logger.info { "shutting down" }
-                    coroutineScope {
-                        shutdown()
-                    }
-                    logger.info { "bot shut down" }
-                }
-            })
         }
+    }
+    
+    @ExperimentalCoroutinesApi
+    suspend fun startBotWithCrashHandler(): Unit = coroutineScope {
+        val startBotAsync = startBotAsync()
+        startBotAsync.await()
+        val e = startBotAsync.getCompletionExceptionOrNull()
+        if (e != null && e !is CancellationException) {
+            logger.warn(e) { "Bot starting failed, trying again in 10s" }
+            delay(10000)
+            startBotWithCrashHandler()
+        }
+    }
+    startBotWithCrashHandler()
+}
+
+private fun clearGuild(guildId: String) {
+//    logger.info { "cleaning up ${guildNames[guildId]}" }
+    
+    val channelsInDeletedGuild = channelsInGuild[guildId] ?: return
+    val usersInVoiceChannelsOfDeletedGuild = channelsInDeletedGuild.mapNotNull { usersInVoiceChannel[it] }.flatten()
+    
+    channelsInGuild.remove(guildId)
+    channelsInDeletedGuild.forEach {
+        guildForChannel.remove(it)
+    }
+    usersInVoiceChannel.remove(guildId)
+    usersInVoiceChannelsOfDeletedGuild.forEach {
+        voiceChannelForUser.remove(it)
     }
 }
 
@@ -221,11 +260,14 @@ val notification by lazy {
 
 fun CoroutineScope.sendGtkMessage(message: String) = launch(Dispatchers.IO) {
     notificationMutex.withLock {
-        notification.update("TiloDiscordBot", message, "discord")
-        notification.show()
+        try {
+            notification.update("TiloDiscordBot", message, "discord")
+            notification.show()
+        } catch (e: RuntimeException) {
+            logger.warn(e) {}
+        }
     }
 }
 
 fun <T, S : Comparable<S>> MutableMap<T, MutableSet<S>>.getOrCreate(key: T) = getOrPut(key) { sortedSetOf() }
 fun <T, M : Comparable<M>, MT> MutableMap<T, MutableMap<M, MT>>.getOrCreate(key: T) = getOrPut(key) { sortedMapOf() }
-

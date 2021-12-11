@@ -23,7 +23,7 @@ guilds where this Bot is a member.
   tty -s
   export RUNNING_INTERACTIVELY="$?"
   
-  ./gradlew classes run --no-daemon
+  ./gradlew shadowJar && exec java -jar ./build/libs/TiloDiscordBot-standalone.jar 
   ```
 - to make the file executable, run 
   ```shell
