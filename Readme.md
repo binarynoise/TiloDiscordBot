@@ -9,10 +9,7 @@ guilds where this Bot is a member.
 - other dependencies are automatically pulled by gradle
 
 ## Set-up
-- to install `java-gnome`, run
-  ```shell
-  sudo apt install java-gnome
-  ```
+- install `java-gnome` for your distribution
 - create a file named `start.sh` with the following contents:
   ```sh
   #!/usr/bin/sh
@@ -25,14 +22,11 @@ guilds where this Bot is a member.
   
   ./gradlew shadowJar && exec java -jar ./build/libs/TiloDiscordBot-standalone.jar 
   ```
-- to make the file executable, run 
-  ```shell
-  chmod +x start.sh
-  ```
+- make the file executable: run `chmod +x start.sh`
 - create an application for your Discord Bot at [the Discord Developer Portal](https://discord.com/developers/applications)
 - add a bot
 - give the bot a name and an app icon if you like
-- fill in the BOT_TOKEN in the `start.sh` file
+- fill in the BOT_TOKEN in the `start.sh` file ("Click to Reveal Token")
 - add the bot to the guilds (servers) where you want to get notified about activities in voice channels
   or ask an admin to add it to the server (only admins are allowed to add bots to servers);
   you can also add the bot to other guilds later, it will automatically pick them up
