@@ -16,7 +16,7 @@ val users: MutableMap<Snowflake, DiscordUser> = sortedMapOf()
 
 val channelsInGuild: MutableMap<Snowflake, MutableSet<Snowflake>> = sortedMapOf()
 val guildForChannel: MutableMap<Snowflake, Snowflake> = sortedMapOf()
-val channelIsAfk: MutableMap<Snowflake, Boolean> = sortedMapOf()
+val afkChannels: MutableSet<Snowflake> = sortedSetOf()
 
 val usersInVoiceChannel: MutableMap<Snowflake, MutableSet<Snowflake>> = mutableMapOf()
 val voiceChannelForUser: MutableMap<Snowflake, Snowflake> = mutableMapOf()
@@ -92,7 +92,7 @@ suspend fun main(): Unit = coroutineScope {
                         channelNames[channel.id] = name
                         channelsInGuild.getOrCreate(guild.id).add(channel.id)
                         guildForChannel[channel.id] = guild.id
-                        channelIsAfk[channel.id] = channel.id == guild.afkChannelId
+                        if(channel.id == guild.afkChannelId) afkChannels += channel.id
                     }
                 }
             }
@@ -181,10 +181,10 @@ suspend fun main(): Unit = coroutineScope {
         
         on<VoiceStateUpdate> {
             val (_, newChannelId, userId) = voiceState
-            logger.info { "onVoiceStateUpdate for ${users[userId]?.username}" }
             val oldChannelId = voiceChannelForUser[userId]
             
             if (oldChannelId != newChannelId) {
+                logger.info { "onVoiceStateUpdate for ${users[userId]?.username}" }
                 if (oldChannelId != null) {
                     usersInVoiceChannel.getOrCreate(oldChannelId).remove(userId)
                 }
@@ -195,7 +195,8 @@ suspend fun main(): Unit = coroutineScope {
                 } else {
                     voiceChannelForUser.remove(userId)
                 }
-                printUsersInChannels()
+                if(!afkChannels.contains(newChannelId))
+                    printUsersInChannels()
             }
         }
     }
@@ -226,7 +227,7 @@ fun CoroutineScope.printUsersInChannels() {
     
     voiceChannelForUser.forEach { (userId, channelId) ->
         val guildId = guildForChannel[channelId] ?: return@forEach
-        if (channelIsAfk[channelId] == true) return@forEach
+        if (afkChannels.contains(channelId)) return@forEach
         tree.getOrCreate(guildId).getOrCreate(channelId).add(userId)
     }
     
