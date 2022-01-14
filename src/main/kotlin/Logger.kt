@@ -1,7 +1,5 @@
 @file:Suppress("unused", "MemberVisibilityCanBePrivate")
 
-import com.jessecorbett.diskord.api.gateway.EventDispatcher
-import kotlinx.coroutines.CoroutineScope
 import java.lang.ref.Reference
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
@@ -9,6 +7,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CoroutineScope
 
 object Logger {
     
@@ -96,7 +95,7 @@ object Logger {
                     this.forEach { (k, v) -> v.dump(k.toString(), nextIndent, processed, forceInclude, forceIncludeClasses) }
                 }
             }
-            forceInclude.none { it == this } && forceIncludeClasses.none { it.isInstance(this) } && (this is Thread || this is ThreadGroup || this is ClassLoader || this is Function<*> || this is CoroutineContext || this is CoroutineScope || this is EventDispatcher<*>) -> {
+            forceInclude.none { it == this } && forceIncludeClasses.none { it.isInstance(this) } && (this is Thread || this is ThreadGroup || this is ClassLoader || this is Function<*> || this is CoroutineContext || this is CoroutineScope) -> {
                 println(this.toString())
             }
             this is Reference<*> -> {

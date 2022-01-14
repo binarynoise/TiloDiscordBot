@@ -17,24 +17,24 @@ dependencies {
     
     // Use the Kotlin JDK 8 standard library.
     implementation(kotlin("stdlib-jdk8"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0-RC")
-    runtimeOnly("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.0-RC")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.0")
     
-    implementation("com.jessecorbett:diskord-bot:2.1.2-SNAPSHOT")
+    implementation("dev.kord:kord-core:0.8.0-M8")
+    implementation("org.slf4j:slf4j-simple:1.7.32")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
-
 }
 
 tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = "1.8"
+    kotlinOptions.jvmTarget = "11"
 }
 
 tasks.withType<ShadowJar> {
     archiveClassifier.set("")
     archiveVersion.set("standalone")
     mergeServiceFiles()
-    minimize()
+//    minimize()
     manifest {
         attributes(mapOf("Main-Class" to "MainKt"))
     }

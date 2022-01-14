@@ -1,52 +1,44 @@
-import com.jessecorbett.diskord.api.common.Channel
-import com.jessecorbett.diskord.api.common.GuildMember
-import com.jessecorbett.diskord.api.common.GuildVoiceChannel
-import com.jessecorbett.diskord.api.common.User
-import com.jessecorbett.diskord.api.gateway.events.CreatedGuildVoiceChannel
-import com.jessecorbett.diskord.api.guild.GuildClient
-import com.jessecorbett.diskord.bot.bot
-import com.jessecorbett.diskord.bot.events
-import com.jessecorbett.diskord.internal.client.RestClient
-import kotlinx.coroutines.*
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import mu.KotlinLogging
-import org.gnome.gtk.Gtk
-import org.gnome.notify.Notification
-import org.gnome.notify.Notify
-import kotlin.concurrent.thread
 import kotlin.system.exitProcess
+import kotlinx.coroutines.*
+import dev.kord.common.entity.*
+import dev.kord.gateway.*
+import dev.kord.rest.route.Position
+import dev.kord.rest.service.RestClient
+import mu.KotlinLogging
 
-val logger = KotlinLogging.logger {}
+private val logger = KotlinLogging.logger {}
 
 val BOT_TOKEN: String = System.getenv("BOT_TOKEN") ?: error("missing bot token")
 
-val guildNames: MutableMap<String, String> = sortedMapOf()
-val channelNames: MutableMap<String, String> = sortedMapOf()
-val users: MutableMap<String, User> = sortedMapOf()
+val guildNames: MutableMap<Snowflake, String> = sortedMapOf()
+val channelNames: MutableMap<Snowflake, String> = sortedMapOf()
+val users: MutableMap<Snowflake, DiscordUser> = sortedMapOf()
 
-val channelsInGuild: MutableMap<String, MutableSet<String>> = sortedMapOf()
-val guildForChannel: MutableMap<String, String> = sortedMapOf()
-val channelIsAfk: MutableMap<String, Boolean> = sortedMapOf()
+val channelsInGuild: MutableMap<Snowflake, MutableSet<Snowflake>> = sortedMapOf()
+val guildForChannel: MutableMap<Snowflake, Snowflake> = sortedMapOf()
+val channelIsAfk: MutableMap<Snowflake, Boolean> = sortedMapOf()
 
-val usersInVoiceChannel: MutableMap<String, MutableSet<String>> = mutableMapOf()
-val voiceChannelForUser: MutableMap<String, String> = mutableMapOf()
+val usersInVoiceChannel: MutableMap<Snowflake, MutableSet<Snowflake>> = mutableMapOf()
+val voiceChannelForUser: MutableMap<Snowflake, Snowflake> = mutableMapOf()
 
-//lateinit var ownUserID: String
-//var bot: BotBase? = null
-val restClient = RestClient.default(BOT_TOKEN)
-//val globalClient = GlobalClient(restClient)
+val restClient = RestClient(BOT_TOKEN)
 
-val guildClients: MutableMap<String, GuildClient> = sortedMapOf()
-fun guildClient(id: String) = guildClients.getOrPut(id) { GuildClient(id, restClient) }
-
-//val channelClients: MutableMap<String, ChannelClient> = sortedMapOf()
-//fun channelClient(id: String) = channelClients.getOrPut(id) { ChannelClient(id, restClient) }
-
-@ExperimentalCoroutinesApi
 suspend fun main(): Unit = coroutineScope {
+    val mainScope = this
+    
+    logger.debug { "Hello..." }
+    sendGtkMessage("Starte...")
+
+//    thread(name = "Debug") {
+//        while (!Thread.interrupted()) {
+//            Thread.sleep(1000L)
+//            true
+//        }
+//    }
+    
     launch(Dispatchers.IO) {
-        val runningInteractively = System.getenv("RUNNING_INTERACTIVELY") == "0" // see start.sh
+        val getenv = System.getenv("RUNNING_INTERACTIVELY")
+        val runningInteractively = (getenv == "0" || getenv == null) // see start.sh
         if (runningInteractively) {
             logger.info { "write exit, quit or stop to shut down the server" }
             while (isActive) {
@@ -58,138 +50,162 @@ suspend fun main(): Unit = coroutineScope {
         }
     }
     
-    fun CoroutineScope.startBotAsync() = async {
-        bot(BOT_TOKEN) {
-//            bot = this
-            events {
-                onReady {
-                    logger.info { "started and ready" }
-//                    ownUserID = it.user.id
-                    Runtime.getRuntime().addShutdownHook(Thread {
-                        runBlocking {
-                            logger.info { "shutting down" }
-                            coroutineScope {
-                                shutdown()
-                            }
-                            logger.info { "bot shut down" }
-                        }
-                    })
+    logger.debug { "creating gateway..." }
+    val gateway = DefaultGateway()
+    logger.debug { "created gateway" }
+    
+    logger.debug { "setting up gateway..." }
+    with(gateway) {
+        on<Ready> {
+            logger.info { "started and ready" }
+            
+            Runtime.getRuntime().addShutdownHook(Thread {
+                logger.info { "shutting down" }
+                runBlocking {
+                    gateway.stop()
+                    delay(1000)
+                    mainScope.coroutineContext.cancel()
+                    while (mainScope.isActive) delay(100L)
                 }
-                
-                onGuildCreate { guild ->
-                    logger.info { "onGuildCreate ${guild.name}" }
-                    
-                    guildNames[guild.id] = guild.name
-                    
-                    clearGuild(guild.id)
-                    
-                    val channels = guild.channels?.filterIsInstance<CreatedGuildVoiceChannel>() ?: emptyList()
-                    
-                    channels.forEach { channel ->
-                        channelNames[channel.id] = channel.name
+                logger.info { "bot shut down" }
+            })
+        }
+        
+        on<GuildCreate> {
+            logger.info { "onGuildCreate ${guild.name}" }
+            
+            guildNames[guild.id] = guild.name
+            clearGuild(guild.id)
+            
+            logger.trace { "onGuildCreate (${guild.name}): voiceChannel start" }
+            val allChannels = guild.channels.value
+            if (allChannels.isNullOrEmpty()) {
+                logger.warn { "onGuildCreate (${guild.name}): No channels in Guild" }
+            } else {
+                val voiceChannels = allChannels.filter { it.type == ChannelType.GuildVoice }
+                if (voiceChannels.isEmpty()) {
+                    logger.warn { "onGuildCreate (${guild.name}): No voiceChannels in Guild" }
+                } else {
+                    voiceChannels.forEach { channel ->
+                        val name = channel.name.value ?: return@forEach
+                        logger.trace { "onGuildCreate (${guild.name}): voiceChannel $name" }
+                        channelNames[channel.id] = name
                         channelsInGuild.getOrCreate(guild.id).add(channel.id)
                         guildForChannel[channel.id] = guild.id
                         channelIsAfk[channel.id] = channel.id == guild.afkChannelId
                     }
-                    
-                    for (voiceState in guild.voiceStates ?: emptyList()) {
-                        logger.info { "onGuildCreate voiceStates: $voiceState" }
-                        val (_, channelId, userId) = voiceState
-                        if (channelId != null) {
-                            usersInVoiceChannel.getOrCreate(channelId).add(userId)
-                            voiceChannelForUser[userId] = channelId
-                        }
-                    }
-                    
-                    val guildClient = guildClient(guild.id)
-                    var members: List<GuildMember> = emptyList()
-                    do {
-                        val lastId: String = members.lastOrNull()?.user?.id ?: "0"
-                        members = guildClient.getMembers(100, lastId)
-                        members.mapNotNull(GuildMember::user).forEach { users[it.id] = it; /*logger.info { it.toString() }*/ }
-                    } while (members.isNotEmpty())
-                    
-                    printUsersInChannels()
+                }
+            }
+            logger.trace { "onGuildCreate (${guild.name}): voiceChannel done" }
+
+            // This doesn't work because it suspends indefinitely, but no Events are sent by Discord
+//            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers start" }
+//            requestGuildMembers(guild.id).collect { chunk ->
+//                val userList = chunk.data.members.mapNotNull { it.user.value }
+//                userList.forEach { users[it.id] = it }
+//                logger.debug { "onGuildCreate (${guild.name}): got ${userList.size} users for ${guild.name}" }
+//            }
+//            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers done" }
+            
+            logger.trace { "onGuildCreate (${guild.name}): query members start" }
+            var members = emptyList<DiscordGuildMember>()
+            do {
+                val lastId: Snowflake = members.lastOrNull()?.user?.value?.id ?: Snowflake(0)
+                members = restClient.guild.getGuildMembers(guild.id, Position.After(lastId), 1000)
+                val userList = members.mapNotNull { it.user.value }
+                userList.forEach { users[it.id] = it }
+                
+                if (userList.isEmpty()) logger.debug("onGuildCreate (${guild.name}): no more users")
+                else logger.debug { "onGuildCreate (${guild.name}): got ${userList.size} users" }
+            } while (members.isNotEmpty())
+            logger.trace { "onGuildCreate (${guild.name}): query members done" }
+            
+            logger.trace { "onGuildCreate (${guild.name}): voiceState start" }
+            val voiceStates = guild.voiceStates.value
+            if (voiceStates.isNullOrEmpty()) {
+                logger.warn { "onGuildCreate (${guild.name}): No voiceStates in Guild" }
+            } else for ((_, channelId, userId) in voiceStates) {
+                if (channelId != null) {
+                    logger.trace { "onGuildCreate (${guild.name}): voiceState ${users[userId]?.username} is active in ${channelNames[channelId]}" }
+                    usersInVoiceChannel.getOrCreate(channelId).add(userId)
+                    voiceChannelForUser[userId] = channelId
+                }
+            }
+            logger.trace { "onGuildCreate (${guild.name}): voiceState done" }
+            
+            printUsersInChannels()
+            logger.debug { "onGuildCreate (${guild.name}) done" }
+        }
+        
+        on<GuildUpdate> {
+            logger.info { "onGuildUpdate ${guild.name}" }
+            guildNames[guild.id] = guild.name
+        }
+        
+        on<GuildDelete> {
+            val guildId = guild.id
+            logger.info { "onGuildDelete ${guildNames[guildId]}" }
+            
+            clearGuild(guildId)
+            printUsersInChannels()
+        }
+        
+        fun handleChannelCreateOrUpdate(channel: DiscordChannel) {
+            if (channel.type == ChannelType.GuildVoice) {
+                val name = channel.name.value ?: return
+                val channelGuild = channel.guildId.value ?: return
+                logger.info { "onChannelCreate/Update $name" }
+                channelNames[channel.id] = name
+                channelsInGuild.getOrCreate(channelGuild).add(channel.id)
+                guildForChannel[channel.id] = channelGuild
+            }
+        }
+        on<ChannelUpdate> {
+            handleChannelCreateOrUpdate(channel)
+        }
+        on<ChannelCreate> {
+            handleChannelCreateOrUpdate(channel)
+        }
+        
+        fun handleGuildMemberAddOrUpdate(user: DiscordUser?) {
+            user ?: return
+            logger.info { "onGuildMemberAdd ${user.username}" }
+            users[user.id] = user
+        }
+        on<GuildMemberAdd> {
+            handleGuildMemberAddOrUpdate(member.user.value)
+        }
+        on<GuildMemberUpdate> {
+            handleGuildMemberAddOrUpdate(member.user)
+        }
+        
+        on<VoiceStateUpdate> {
+            val (_, newChannelId, userId) = voiceState
+            logger.info { "onVoiceStateUpdate for ${users[userId]?.username}" }
+            val oldChannelId = voiceChannelForUser[userId]
+            
+            if (oldChannelId != newChannelId) {
+                if (oldChannelId != null) {
+                    usersInVoiceChannel.getOrCreate(oldChannelId).remove(userId)
                 }
                 
-                onGuildUpdate { guild ->
-                    logger.info { "onGuildUpdate ${guild.name}" }
-                    guildNames[guild.id] = guild.name
+                if (newChannelId != null) {
+                    voiceChannelForUser[userId] = newChannelId
+                    usersInVoiceChannel.getOrCreate(newChannelId).add(userId)
+                } else {
+                    voiceChannelForUser.remove(userId)
                 }
-                
-                onGuildDelete { guild ->
-                    val guildId = guild.guildId
-                    logger.info { "onGuildDelete ${guildNames[guildId]}" }
-                    
-                    clearGuild(guildId)
-                    printUsersInChannels()
-                }
-                
-                val channelHandler: suspend (Channel) -> Unit = { channel ->
-                    if (channel is GuildVoiceChannel) {
-                        logger.info { "onChannelCreate/Update ${channel.name}" }
-                        channelNames[channel.id] = channel.name
-                        channelsInGuild.getOrCreate(channel.guildId).add(channel.id)
-                        guildForChannel[channel.id] = channel.guildId
-                    }
-                }
-                onChannelCreate(channelHandler)
-                
-                onChannelUpdate(channelHandler)
-                
-                onGuildMemberAdd { guildMemberAdd ->
-                    val user = guildMemberAdd.user
-                    logger.info { "onGuildMemberAdd ${user.username}" }
-                    users[user.id] = user
-                }
-                
-                onGuildMemberUpdate { guildMemberUpdate ->
-                    val user = guildMemberUpdate.user
-                    logger.info { "onGuildMemberUpdate ${user.username}" }
-                    users[user.id] = user
-                }
-                
-                onVoiceStateUpdate { voiceState ->
-                    logger.info { "onVoiceStateUpdate" }
-                    val (_, newChannelId, userId) = voiceState
-                    
-                    val oldChannelId = voiceChannelForUser[userId]
-                    
-                    if (oldChannelId != newChannelId) {
-                        if (oldChannelId != null) {
-                            usersInVoiceChannel.getOrCreate(oldChannelId).remove(userId)
-                        }
-                        
-                        if (newChannelId != null) {
-                            voiceChannelForUser[userId] = newChannelId
-                            usersInVoiceChannel.getOrCreate(newChannelId).add(userId)
-                        } else {
-                            voiceChannelForUser.remove(userId)
-                        }
-                        printUsersInChannels()
-                    }
-                }
+                printUsersInChannels()
             }
         }
     }
-    
-    @ExperimentalCoroutinesApi
-    suspend fun startBotWithCrashHandler(): Unit = coroutineScope {
-        val startBotAsync = startBotAsync()
-        startBotAsync.await()
-        val e = startBotAsync.getCompletionExceptionOrNull()
-        if (e != null && e !is CancellationException) {
-            logger.warn(e) { "Bot starting failed, trying again in 10s" }
-            delay(10000)
-            startBotWithCrashHandler()
-        }
-    }
-    startBotWithCrashHandler()
+    logger.debug { "set up gateway" }
+    logger.info { "starting gateway" }
+    gateway.start(GatewayConfigurationBuilder(BOT_TOKEN, presence = DiscordPresence(PresenceStatus.Online, false)).build())
+    logger.info { "stopped gateway" }
 }
 
-private fun clearGuild(guildId: String) {
-//    logger.info { "cleaning up ${guildNames[guildId]}" }
-    
+private fun clearGuild(guildId: Snowflake) {
     val channelsInDeletedGuild = channelsInGuild[guildId] ?: return
     val usersInVoiceChannelsOfDeletedGuild = channelsInDeletedGuild.mapNotNull { usersInVoiceChannel[it] }.flatten()
     
@@ -203,9 +219,10 @@ private fun clearGuild(guildId: String) {
     }
 }
 
+var lastMessage: String? = null
 fun CoroutineScope.printUsersInChannels() {
-    //        guilds     guildId channels   channelId users     userId
-    val tree: MutableMap<String, MutableMap<String, MutableSet<String>>> = sortedMapOf()
+    //        guilds     guildId    channels   channelId  users     userId
+    val tree: MutableMap<Snowflake, MutableMap<Snowflake, MutableSet<Snowflake>>> = sortedMapOf()
     
     voiceChannelForUser.forEach { (userId, channelId) ->
         val guildId = guildForChannel[channelId] ?: return@forEach
@@ -229,43 +246,9 @@ fun CoroutineScope.printUsersInChannels() {
         }
     }.trim()
     
-    if (message.isNotBlank()) logger.info { message }
-    sendGtkMessage(message)
-}
-
-val notificationMutex = Mutex()
-val notification by lazy {
-    Gtk.init(emptyArray())
-    Notify.init("TiloDiscordBot")
-    thread {
-        Gtk.main()
-    }
-    
-    val notification = Notification("TiloDiscordBot", "", "discord")
-    notification.setHint("suppress-sound", 1)
-    
-    Runtime.getRuntime().addShutdownHook(Thread {
-        notification.update("TiloDiscordBot", "shutting down", "discord")
-        notification.show()
-        
-        Thread.sleep(1000)
-        
-        notification.close()
-        Notify.uninit()
-        Gtk.mainQuit()
-    })
-    notification
-    
-}
-
-fun CoroutineScope.sendGtkMessage(message: String) = launch(Dispatchers.IO) {
-    notificationMutex.withLock {
-        try {
-            notification.update("TiloDiscordBot", message, "discord")
-            notification.show()
-        } catch (e: RuntimeException) {
-            logger.warn(e) {}
-        }
+    if (lastMessage != message) {
+        sendGtkMessage(message)
+        lastMessage = message
     }
 }
 
