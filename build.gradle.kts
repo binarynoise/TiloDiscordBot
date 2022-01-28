@@ -8,7 +8,7 @@ plugins {
 
 repositories {
     mavenCentral()
-    mavenLocal()
+    maven("https://oss.sonatype.org/content/repositories/snapshots")
 }
 
 dependencies {
@@ -20,8 +20,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.0")
     
-    implementation("dev.kord:kord-core:0.8.0-M8")
-    implementation("org.slf4j:slf4j-simple:1.7.32")
+    implementation("dev.kord:kord-core:0.8.x-SNAPSHOT")
+    implementation("org.slf4j:slf4j-simple:1.7.33")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }

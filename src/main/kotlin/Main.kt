@@ -13,6 +13,7 @@ val BOT_TOKEN: String = System.getenv("BOT_TOKEN") ?: error("missing bot token")
 val guildNames: MutableMap<Snowflake, String> = sortedMapOf()
 val channelNames: MutableMap<Snowflake, String> = sortedMapOf()
 val users: MutableMap<Snowflake, DiscordUser> = sortedMapOf()
+val nicknames: MutableMap<Snowflake, MutableMap<Snowflake, String>> = sortedMapOf()
 
 val channelsInGuild: MutableMap<Snowflake, MutableSet<Snowflake>> = sortedMapOf()
 val guildForChannel: MutableMap<Snowflake, Snowflake> = sortedMapOf()
@@ -79,25 +80,21 @@ suspend fun main(): Unit = coroutineScope {
             
             logger.trace { "onGuildCreate (${guild.name}): voiceChannel start" }
             val allChannels = guild.channels.value
-            if (allChannels.isNullOrEmpty()) {
-                logger.warn { "onGuildCreate (${guild.name}): No channels in Guild" }
-            } else {
+            if (!allChannels.isNullOrEmpty()) {
                 val voiceChannels = allChannels.filter { it.type == ChannelType.GuildVoice }
-                if (voiceChannels.isEmpty()) {
-                    logger.warn { "onGuildCreate (${guild.name}): No voiceChannels in Guild" }
-                } else {
+                if (voiceChannels.isNotEmpty()) {
                     voiceChannels.forEach { channel ->
                         val name = channel.name.value ?: return@forEach
                         logger.trace { "onGuildCreate (${guild.name}): voiceChannel $name" }
                         channelNames[channel.id] = name
                         channelsInGuild.getOrCreate(guild.id).add(channel.id)
                         guildForChannel[channel.id] = guild.id
-                        if(channel.id == guild.afkChannelId) afkChannels += channel.id
+                        if (channel.id == guild.afkChannelId) afkChannels += channel.id
                     }
-                }
-            }
+                } else logger.warn { "onGuildCreate (${guild.name}): No voiceChannels in Guild" }
+            } else logger.warn { "onGuildCreate (${guild.name}): No channels in Guild" }
             logger.trace { "onGuildCreate (${guild.name}): voiceChannel done" }
-
+            
             // This doesn't work because it suspends indefinitely, but no Events are sent by Discord
 //            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers start" }
 //            requestGuildMembers(guild.id).collect { chunk ->
@@ -107,30 +104,36 @@ suspend fun main(): Unit = coroutineScope {
 //            }
 //            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers done" }
             
+            val guildNickNames = nicknames.getOrCreate(guild.id)
+            
             logger.trace { "onGuildCreate (${guild.name}): query members start" }
             var members = emptyList<DiscordGuildMember>()
             do {
                 val lastId: Snowflake = members.lastOrNull()?.user?.value?.id ?: Snowflake(0)
                 members = restClient.guild.getGuildMembers(guild.id, Position.After(lastId), 1000)
-                val userList = members.mapNotNull { it.user.value }
-                userList.forEach { users[it.id] = it }
+                val userMap = members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
+                userMap.values.forEach { users[it.id] = it }
+                userMap.forEach { (member, user) ->
+                    val nick = member.nick.value
+                    if (nick != null) guildNickNames[user.id] = nick
+                }
                 
-                if (userList.isEmpty()) logger.debug("onGuildCreate (${guild.name}): no more users")
-                else logger.debug { "onGuildCreate (${guild.name}): got ${userList.size} users" }
+                if (userMap.isEmpty()) logger.debug("onGuildCreate (${guild.name}): no more users")
+                else logger.debug { "onGuildCreate (${guild.name}): got ${userMap.size} users" }
             } while (members.isNotEmpty())
             logger.trace { "onGuildCreate (${guild.name}): query members done" }
             
             logger.trace { "onGuildCreate (${guild.name}): voiceState start" }
             val voiceStates = guild.voiceStates.value
-            if (voiceStates.isNullOrEmpty()) {
-                logger.warn { "onGuildCreate (${guild.name}): No voiceStates in Guild" }
-            } else for ((_, channelId, userId) in voiceStates) {
-                if (channelId != null) {
-                    logger.trace { "onGuildCreate (${guild.name}): voiceState ${users[userId]?.username} is active in ${channelNames[channelId]}" }
-                    usersInVoiceChannel.getOrCreate(channelId).add(userId)
-                    voiceChannelForUser[userId] = channelId
+            if (!voiceStates.isNullOrEmpty()) {
+                for ((_, channelId, userId) in voiceStates) {
+                    if (channelId != null) {
+                        logger.trace { "onGuildCreate (${guild.name}): voiceState ${users[userId]?.username} is active in ${channelNames[channelId]}" }
+                        usersInVoiceChannel.getOrCreate(channelId).add(userId)
+                        voiceChannelForUser[userId] = channelId
+                    }
                 }
-            }
+            } else logger.warn { "onGuildCreate (${guild.name}): No voiceStates in Guild" }
             logger.trace { "onGuildCreate (${guild.name}): voiceState done" }
             
             printUsersInChannels()
@@ -195,8 +198,7 @@ suspend fun main(): Unit = coroutineScope {
                 } else {
                     voiceChannelForUser.remove(userId)
                 }
-                if(!afkChannels.contains(newChannelId))
-                    printUsersInChannels()
+                if (!afkChannels.contains(newChannelId)) printUsersInChannels()
             }
         }
     }
@@ -240,7 +242,15 @@ fun CoroutineScope.printUsersInChannels() {
                 appendLine()
                 userIds.forEach {
                     append("    ")
-                    append(users[it]?.username)
+                    val nick = nicknames[guildId]?.get(it)
+                    if (nick == null) {
+                        append(users[it]?.username)
+                    } else {
+                        append(nick)
+                        append(" (")
+                        append(users[it]?.username)
+                        append(")")
+                    }
                     appendLine()
                 }
             }
