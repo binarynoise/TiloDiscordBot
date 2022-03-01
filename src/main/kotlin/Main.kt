@@ -198,7 +198,7 @@ suspend fun main(): Unit = coroutineScope {
                 } else {
                     voiceChannelForUser.remove(userId)
                 }
-                if (!afkChannels.contains(newChannelId)) printUsersInChannels()
+                printUsersInChannels()
             }
         }
     }
@@ -258,8 +258,10 @@ fun CoroutineScope.printUsersInChannels() {
     }.trim()
     
     if (lastMessage != message) {
-        sendGtkMessage(message)
         lastMessage = message
+        if (message.isEmpty())
+            sendGtkMessage("-")
+        else sendGtkMessage(message)
     }
 }
 
