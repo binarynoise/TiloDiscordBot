@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "1.6.0"
-    id("com.github.johnrengelman.shadow") version "7.1.0"
+    id("com.github.johnrengelman.shadow") version "7.1.2"
 }
 
 repositories {
@@ -21,7 +21,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.0")
     
     implementation("dev.kord:kord-core:0.8.x-SNAPSHOT")
-    implementation("org.slf4j:slf4j-simple:1.7.33")
+    implementation("org.slf4j:slf4j-simple:1.7.35")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }
