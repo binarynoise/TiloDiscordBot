@@ -2,7 +2,7 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.6.0"
+    kotlin("jvm") version "1.6.10"
     id("com.github.johnrengelman.shadow") version "7.1.2"
 }
 
@@ -20,8 +20,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.0")
     
-    implementation("dev.kord:kord-core:0.8.x-SNAPSHOT")
-    implementation("org.slf4j:slf4j-simple:1.7.35")
+    implementation("dev.kord:kord-core:0.8.0-M12")
+    implementation("org.slf4j:slf4j-simple:1.7.36")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }

@@ -224,7 +224,7 @@ private fun clearGuild(guildId: Snowflake) {
 
 var lastMessage: String? = null
 fun CoroutineScope.printUsersInChannels() {
-    //        guilds     guildId    channels   channelId  users     userId
+    //        guilds     guildId    channels   channelId  users      userId
     val tree: MutableMap<Snowflake, MutableMap<Snowflake, MutableSet<Snowflake>>> = sortedMapOf()
     
     voiceChannelForUser.forEach { (userId, channelId) ->
