@@ -34,7 +34,10 @@ tasks.withType<ShadowJar> {
     archiveClassifier.set("")
     archiveVersion.set("standalone")
     mergeServiceFiles()
-//    minimize()
+    minimize {
+        exclude(dependency("dev.kord:kord-core:.*"))
+        exclude(dependency("org.slf4j:slf4j-simple:.*"))
+    }
     manifest {
         attributes(mapOf("Main-Class" to "MainKt"))
     }
