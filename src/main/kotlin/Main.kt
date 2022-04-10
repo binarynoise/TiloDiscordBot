@@ -111,7 +111,7 @@ suspend fun main(): Unit = coroutineScope {
             do {
                 val lastId: Snowflake = members.lastOrNull()?.user?.value?.id ?: Snowflake(0)
                 members = restClient.guild.getGuildMembers(guild.id, Position.After(lastId), 1000)
-                val userMap = members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
+                val userMap = @Suppress("UNCHECKED_CAST") members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
                 userMap.values.forEach { users[it.id] = it }
                 userMap.forEach { (member, user) ->
                     val nick = member.nick.value
