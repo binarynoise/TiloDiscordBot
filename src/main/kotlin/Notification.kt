@@ -52,7 +52,7 @@ fun CoroutineScope.sendGtkMessage(message: String) = launch(Dispatchers.IO) {
         try {
             notification.update("TiloDiscordBot", message, "discord")
             notification.show()
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
             logger.warn(e) { "Failed to show notification" }
         }
         logger.debug { "ready for next notification" }
