@@ -2,7 +2,6 @@ import kotlin.system.exitProcess
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
 import dev.kord.gateway.*
-import dev.kord.rest.route.Position
 import dev.kord.rest.service.RestClient
 import mu.KotlinLogging
 
@@ -97,34 +96,20 @@ suspend fun main(): Unit = coroutineScope {
             } else logger.warn { "onGuildCreate (${guild.name}): No channels in Guild" }
             logger.trace { "onGuildCreate (${guild.name}): voiceChannel done" }
             
-            // This doesn't work because it suspends indefinitely, but no Events are sent by Discord
-//            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers start" }
-//            requestGuildMembers(guild.id).collect { chunk ->
-//                val userList = chunk.data.members.mapNotNull { it.user.value }
-//                userList.forEach { users[it.id] = it }
-//                logger.debug { "onGuildCreate (${guild.name}): got ${userList.size} users for ${guild.name}" }
-//            }
-//            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers done" }
+            val guildNickNames: MutableMap<Snowflake, String> = nicknames.getOrCreate(guild.id)
             
-            val guildNickNames = nicknames.getOrCreate(guild.id)
-            
-            logger.trace { "onGuildCreate (${guild.name}): query members start" }
-            var members = emptyList<DiscordGuildMember>()
-            do {
-                val lastId: Snowflake = members.lastOrNull()?.user?.value?.id ?: Snowflake(0)
-                members = restClient.guild.getGuildMembers(guild.id, Position.After(lastId), 1000)
+            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers start" }
+            requestGuildMembers(guild.id).collect { chunk ->
                 @Suppress("UNCHECKED_CAST") //
-                val userMap = members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
+                val userMap = chunk.data.members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
                 userMap.values.forEach { users[it.id] = it }
                 userMap.forEach { (member, user) ->
                     val nick = member.nick.value
                     if (nick != null) guildNickNames[user.id] = nick
                 }
-                
-                if (userMap.isEmpty()) logger.debug("onGuildCreate (${guild.name}): no more users")
-                else logger.debug { "onGuildCreate (${guild.name}): got ${userMap.size} users" }
-            } while (members.isNotEmpty())
-            logger.trace { "onGuildCreate (${guild.name}): query members done" }
+                logger.debug { "onGuildCreate (${guild.name}): got ${userMap.size} users for ${guild.name}" }
+            }
+            logger.debug { "onGuildCreate (${guild.name}): requestGuildMembers done" }
             
             logger.trace { "onGuildCreate (${guild.name}): voiceState start" }
             val voiceStates = guild.voiceStates.value
@@ -207,7 +192,14 @@ suspend fun main(): Unit = coroutineScope {
     }
     logger.debug { "set up gateway" }
     logger.info { "starting gateway" }
-    gateway.start(GatewayConfigurationBuilder(BOT_TOKEN, presence = DiscordPresence(PresenceStatus.Online, false)).build())
+    
+    @OptIn(PrivilegedIntent::class) //
+    val gatewayConfiguration = GatewayConfigurationBuilder(
+        BOT_TOKEN,
+        presence = DiscordPresence(PresenceStatus.Online, false),
+        intents = Intents.nonPrivileged + Intent.GuildMembers,
+    ).build()
+    gateway.start(gatewayConfiguration)
     logger.info { "stopped gateway" }
 }
 
