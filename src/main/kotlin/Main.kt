@@ -260,8 +260,7 @@ fun CoroutineScope.printUsersInChannels() {
     
     if (lastMessage != message) {
         lastMessage = message
-        if (message.isEmpty())
-            sendGtkMessage("-")
+        if (message.isEmpty()) sendGtkMessage("-")
         else sendGtkMessage(message)
     }
 }
