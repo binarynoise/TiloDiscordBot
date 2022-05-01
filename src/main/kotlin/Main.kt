@@ -6,7 +6,9 @@ import dev.kord.rest.route.Position
 import dev.kord.rest.service.RestClient
 import mu.KotlinLogging
 
-private val logger = KotlinLogging.logger {}
+private val logger = KotlinLogging.logger {}.apply {
+    System.getProperties()["kotlin-logging.throwOnMessageError"] = true
+}
 
 val BOT_TOKEN: String = System.getenv("BOT_TOKEN") ?: error("missing bot token")
 
