@@ -49,7 +49,7 @@ tasks.withType<AbstractCompile> {
 
 tasks.withType<Jar> {
     manifest {
-        attributes(mapOf("Main-Class" to "Main"))
+        attributes(mapOf("Main-Class" to "MainKt"))
     }
 }
 
