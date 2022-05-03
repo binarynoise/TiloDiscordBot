@@ -10,7 +10,7 @@ private val logger = KotlinLogging.logger {}.apply {
     System.getProperties()["kotlin-logging.throwOnMessageError"] = true
 }
 
-val BOT_TOKEN: String = System.getenv("BOT_TOKEN") ?: error("missing bot token")
+val BOT_TOKEN: String by EnvironmentVariable
 
 val guildNames: MutableMap<Snowflake, String> = sortedMapOf()
 val channelNames: MutableMap<Snowflake, String> = sortedMapOf()
