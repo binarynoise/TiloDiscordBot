@@ -1,3 +1,4 @@
+import kotlin.coroutines.coroutineContext
 import kotlin.system.exitProcess
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
@@ -218,7 +219,7 @@ private fun clearGuild(guildId: Snowflake) {
 }
 
 var lastMessage: String? = null
-fun CoroutineScope.printUsersInChannels() {
+suspend fun printUsersInChannels() {
     //        guilds     guildId    channels   channelId  users      userId
     val tree: MutableMap<Snowflake, MutableMap<Snowflake, MutableSet<Snowflake>>> = sortedMapOf()
     
@@ -261,3 +262,12 @@ fun CoroutineScope.printUsersInChannels() {
 
 fun <T, S : Comparable<S>> MutableMap<T, MutableSet<S>>.getOrCreate(key: T) = getOrPut(key) { sortedSetOf() }
 fun <T, M : Comparable<M>, MT> MutableMap<T, MutableMap<M, MT>>.getOrCreate(key: T) = getOrPut(key) { sortedMapOf() }
+
+/**
+ * allows launching a block in a suspend-fun without a CoroutineScope available
+ */
+suspend fun launch(block: suspend CoroutineScope.() -> Unit): Job {
+    val job = coroutineContext.job
+    return if (job is CoroutineScope) job.launch(coroutineContext, block = block)
+    else coroutineScope { this.launch(block = block) } // `this` keyword to avoid recursion
+}

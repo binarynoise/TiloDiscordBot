@@ -1,11 +1,10 @@
 import kotlin.concurrent.thread
 import kotlinx.atomicfu.atomic
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import org.gnome.gtk.Gtk
 import org.gnome.notify.Notification
@@ -45,10 +44,10 @@ val notification by lazy {
     
 }
 
-fun CoroutineScope.sendGtkMessage(message: String) = launch(Dispatchers.IO) {
+suspend fun sendGtkMessage(message: String) = withContext(Dispatchers.IO) {
     notificationMutex.withLock {
         logger.info { "\n$message" }
-        if (!allowNotifications) return@launch
+        if (!allowNotifications) return@withLock
         try {
             notification.update("TiloDiscordBot", message, "discord")
             notification.show()
