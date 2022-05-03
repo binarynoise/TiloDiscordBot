@@ -11,6 +11,7 @@ private val logger = KotlinLogging.logger {}.apply {
 }
 
 val BOT_TOKEN: String by EnvironmentVariable
+val LITERAL_BOT_TOKEN: String by EnvironmentVariable
 
 val guildNames: MutableMap<Snowflake, String> = sortedMapOf()
 val channelNames: MutableMap<Snowflake, String> = sortedMapOf()
@@ -25,6 +26,7 @@ val usersInVoiceChannel: MutableMap<Snowflake, MutableSet<Snowflake>> = mutableM
 val voiceChannelForUser: MutableMap<Snowflake, Snowflake> = mutableMapOf()
 
 val restClient = RestClient(BOT_TOKEN)
+val literalTokenRestClient = RestClient(LiteralTokenRequestHandler(LITERAL_BOT_TOKEN))
 
 suspend fun main(): Unit = coroutineScope {
     val mainScope = this
