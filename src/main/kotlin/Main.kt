@@ -1,5 +1,6 @@
 import kotlin.coroutines.coroutineContext
 import kotlin.system.exitProcess
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
 import dev.kord.gateway.*
@@ -11,7 +12,7 @@ private val logger = KotlinLogging.logger {}.apply {
 }
 
 val BOT_TOKEN: String by EnvironmentVariable
-val LITERAL_BOT_TOKEN: String by EnvironmentVariable
+val LITERAL_BOT_TOKEN: String? by OptionalEnvironmentVariable
 
 val guildNames: MutableMap<Snowflake, String> = sortedMapOf()
 val channelNames: MutableMap<Snowflake, String> = sortedMapOf()
@@ -26,7 +27,12 @@ val usersInVoiceChannel: MutableMap<Snowflake, MutableSet<Snowflake>> = mutableM
 val voiceChannelForUser: MutableMap<Snowflake, Snowflake> = mutableMapOf()
 
 val restClient = RestClient(BOT_TOKEN)
-val literalTokenRestClient = RestClient(LiteralTokenRequestHandler(LITERAL_BOT_TOKEN))
+val literalTokenRestClient = LITERAL_BOT_TOKEN?.let { RestClient(LiteralTokenRequestHandler(it)) }
+
+val musicBot = OptionalEnvironmentVariable("MUSIC_BOT") { Snowflake(it.toLong()) }
+val musicBotControlChannel by EnvironmentVariable("MUSIC_BOT_CONTROL_CHANNEL") { Snowflake(it.toLong()) }
+var musicBotTimeoutJob: Job? = null
+val musicBotTimeoutDuration = 30.minutes
 
 suspend fun main(): Unit = coroutineScope {
     val mainScope = this
@@ -128,6 +134,8 @@ suspend fun main(): Unit = coroutineScope {
             logger.trace { "onGuildCreate (${guild.name}): voiceState done" }
             
             printUsersInChannels()
+            checkMusicBotTimeouts()
+            
             logger.debug { "onGuildCreate (${guild.name}) done" }
         }
         
@@ -191,6 +199,8 @@ suspend fun main(): Unit = coroutineScope {
                 }
                 printUsersInChannels()
             }
+            
+            checkMusicBotTimeouts()
         }
     }
     logger.debug { "set up gateway" }
@@ -260,6 +270,65 @@ suspend fun printUsersInChannels() {
         if (message.isEmpty()) sendGtkMessage("-")
         else sendGtkMessage(message)
     }
+}
+
+suspend fun checkMusicBotTimeouts() {
+    if (literalTokenRestClient != null && musicBot != null && musicBot.isInVoiceAndAlone()) {
+        createAndStartMusicBotTimeoutJob()
+    } else {
+        stopAndRemoveMusicBotTimeoutJob()
+    }
+}
+
+suspend fun createAndStartMusicBotTimeoutJob() {
+    if (musicBotTimeoutJob?.isActive == true) return
+    
+    musicBotTimeoutJob = launch {
+        if (musicBot == null) return@launch
+        if (literalTokenRestClient == null) {
+            logger.error { "MUSIC_BOT is set, but LITERAL_BOT_TOKEN is missing" }
+            return@launch
+        }
+        
+        val hashCode = coroutineContext.job.hashCode()
+        logger.info { "MusicBotTimeoutJob@$hashCode started" }
+        val halfDuration = musicBotTimeoutDuration / 2
+        
+        delay(halfDuration)
+        
+        val channel = voiceChannelForUser[musicBot] ?: return@launch
+        literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
+            content = "<@$musicBot> ist seit $halfDuration alleine in <#$channel> und wird in $halfDuration gestoppt"
+        }
+        
+        delay(halfDuration)
+        
+        if (voiceChannelForUser[musicBot] == null) return@launch
+        literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
+            content = ".stop"
+        }
+        
+        logger.info { "MusicBotTimeoutJob@$hashCode disconnected ${users[musicBot]?.username}" }
+    }.apply {
+        invokeOnCompletion {
+            when (it) {
+                null -> logger.info { "MusicBotTimeoutJob@${hashCode()} finished" }
+                is CancellationException -> logger.info { "MusicBotTimeoutJob${hashCode()} was cancelled" }
+                else -> logger.warn(it) { "MusicBotTimeoutJob@${hashCode()} failed" }
+            }
+        }
+        musicBotTimeoutJob = null
+    }
+}
+
+private suspend fun stopAndRemoveMusicBotTimeoutJob() {
+    musicBotTimeoutJob?.cancelAndJoin()
+    musicBotTimeoutJob = null
+}
+
+private fun Snowflake.isInVoiceAndAlone(): Boolean {
+    val voiceChannel = voiceChannelForUser[this] ?: return false
+    return usersInVoiceChannel[voiceChannel]!!.filterNot { it == this }.isEmpty()
 }
 
 fun <T, S : Comparable<S>> MutableMap<T, MutableSet<S>>.getOrCreate(key: T) = getOrPut(key) { sortedSetOf() }
