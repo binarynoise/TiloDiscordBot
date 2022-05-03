@@ -47,7 +47,7 @@ val notification by lazy {
 
 fun CoroutineScope.sendGtkMessage(message: String) = launch(Dispatchers.IO) {
     notificationMutex.withLock {
-        logger.info { "\n\"\"\"\n$message\n\"\"\"" }
+        logger.info { "\n$message" }
         if (!allowNotifications) return@launch
         try {
             notification.update("TiloDiscordBot", message, "discord")

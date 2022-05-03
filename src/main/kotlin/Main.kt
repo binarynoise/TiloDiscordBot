@@ -173,16 +173,16 @@ suspend fun main(): Unit = coroutineScope {
             handleChannelCreateOrUpdate(channel)
         }
         
-        fun handleGuildMemberAddOrUpdate(user: DiscordUser?) {
+        fun handleGuildMemberAddOrUpdate(guild: Snowflake, user: DiscordUser?) {
             user ?: return
-            logger.info { "onGuildMemberAdd ${user.username}" }
+            logger.debug { "onGuildMemberAdd/Update ${guildNames[guild]} ${user.username}" }
             users[user.id] = user
         }
         on<GuildMemberAdd> {
-            handleGuildMemberAddOrUpdate(member.user.value)
+            handleGuildMemberAddOrUpdate(member.guildId, member.user.value)
         }
         on<GuildMemberUpdate> {
-            handleGuildMemberAddOrUpdate(member.user)
+            handleGuildMemberAddOrUpdate(member.guildId, member.user)
         }
         
         on<VoiceStateUpdate> {
