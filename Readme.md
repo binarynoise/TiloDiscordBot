@@ -4,11 +4,13 @@ Notifies you when people join or leave voice channels in Discord for all
 guilds where this Bot is a member.
 
 ## Dependencies
+
 - currently, only working on Linux with a Gnome based DE (such as Gnome or Cinnamon)
 - depends on [`java-gnome`](http://java-gnome.sourceforge.net/) for the notification
 - other dependencies are automatically pulled by gradle
 
 ## Set-up
+
 - install `java-gnome` for your distribution
 - create a file named `start.sh` with the following contents:
   ```sh
@@ -32,5 +34,6 @@ guilds where this Bot is a member.
   you can also add the bot to other guilds later, it will automatically pick them up
 
 ## Run
+
 - run `start.sh` or put it into autostart
 - get notified
