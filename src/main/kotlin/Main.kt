@@ -130,7 +130,7 @@ suspend fun main(): Unit = coroutineScope {
                         voiceChannelForUser[userId] = channelId
                     }
                 }
-            } else logger.warn { "onGuildCreate (${guild.name}): No voiceStates in Guild" }
+            } else logger.debug { "onGuildCreate (${guild.name}): No voiceStates in Guild" }
             logger.trace { "onGuildCreate (${guild.name}): voiceState done" }
             
             printUsersInChannels()
