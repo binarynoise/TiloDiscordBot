@@ -18,8 +18,6 @@ class EnvironmentVariable<T : Any>(private val name: String? = null, private val
             System.getenv(name)?.let(transform) ?: error("missing environment variable: $name")
         
         override operator fun getValue(thisRef: Any?, property: KProperty<*>): String = invoke(property.name)
-        
-        private val cache: MutableMap<KProperty<*>, String> = mutableMapOf()
     }
 }
 
