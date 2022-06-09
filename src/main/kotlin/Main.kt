@@ -1,6 +1,7 @@
 import kotlin.coroutines.coroutineContext
 import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
 import dev.kord.gateway.*
@@ -231,6 +232,14 @@ private fun clearGuild(guildId: Snowflake) {
 }
 
 var lastMessage: String? = null
+var lastTree: MutableMap<Snowflake, MutableMap<Snowflake, MutableSet<Snowflake>>> = sortedMapOf()
+var updateTreeJob: Job? = null
+
+const val fullWidthPlus = "\uFF0B"
+const val fullWidthMinus = "\uFF0D"
+const val emSpace = "\u2003"
+const val enSpace = "\u2002"
+
 suspend fun printUsersInChannels() {
     //        guilds     guildId    channels   channelId  users      userId
     val tree: MutableMap<Snowflake, MutableMap<Snowflake, MutableSet<Snowflake>>> = sortedMapOf()
@@ -245,30 +254,48 @@ suspend fun printUsersInChannels() {
         tree.forEach { (guildId, channels) ->
             appendLine(guildNames[guildId])
             channels.forEach { (channelId, userIds) ->
-                append("  ")
+                append("$emSpace$enSpace")
                 append(channelNames[channelId])
                 appendLine()
-                userIds.forEach {
-                    append("    ")
-                    val nick = nicknames[guildId]?.get(it)
-                    if (nick == null) {
-                        append(users[it]?.username)
-                    } else {
-                        append(nick)
-                        append(" (")
-                        append(users[it]?.username)
-                        append(")")
-                    }
-                    appendLine()
-                }
+                
+                val lastUserIds = lastTree.getOrEmpty(guildId).getOrEmpty(channelId)
+                val (left, stayed, connected) = removedStayedNew(userIds, lastUserIds)
+                
+                appendUsers(left, "$fullWidthMinus$emSpace$emSpace", guildId)
+                appendUsers(connected, "$fullWidthPlus$emSpace$emSpace", guildId)
+                appendUsers(stayed, "$emSpace$emSpace$emSpace", guildId)
             }
         }
     }.trim()
     
     if (lastMessage != message) {
         lastMessage = message
+        updateTreeJob?.cancel()
+        updateTreeJob = launch {
+            delay(10.seconds)
+            lastTree = tree
+            updateTreeJob = null
+        }
+        
         if (message.isEmpty()) sendGtkMessage("-")
         else sendGtkMessage(message)
+    }
+}
+
+private fun StringBuilder.appendUsers(list: List<Snowflake>, prefix: String, guildId: Snowflake) {
+    list.forEach {
+        append(prefix)
+        val nick = nicknames[guildId]?.get(it)
+        val username = users[it]?.username
+        if (nick == null) {
+            append(username)
+        } else {
+            append(nick)
+            append(" (")
+            append(username)
+            append(")")
+        }
+        appendLine()
     }
 }
 
@@ -291,7 +318,7 @@ suspend fun createAndStartMusicBotTimeoutJob() {
         }
         
         val hashCode = coroutineContext.job.hashCode()
-        logger.info { "MusicBotTimeoutJob@$hashCode started" }
+        logger.info { "MusicBotTimeoutJob@$hashCode for ${users[musicBot]?.username} started" }
         val halfDuration = musicBotTimeoutDuration / 2
         
         delay(halfDuration)
@@ -305,16 +332,16 @@ suspend fun createAndStartMusicBotTimeoutJob() {
         
         if (voiceChannelForUser[musicBot] == null) return@launch
         literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
-            content = ".stop"
+            content = "<@$musicBot>stop"
         }
         
         logger.info { "MusicBotTimeoutJob@$hashCode disconnected ${users[musicBot]?.username}" }
     }.apply {
         invokeOnCompletion {
             when (it) {
-                null -> logger.info { "MusicBotTimeoutJob@${hashCode()} finished" }
-                is CancellationException -> logger.info { "MusicBotTimeoutJob${hashCode()} was cancelled" }
-                else -> logger.warn(it) { "MusicBotTimeoutJob@${hashCode()} failed" }
+                null -> logger.info { "MusicBotTimeoutJob@${hashCode()} for ${users[musicBot]?.username} finished" }
+                is CancellationException -> logger.info { "MusicBotTimeoutJob${hashCode()} for ${users[musicBot]?.username} was cancelled" }
+                else -> logger.warn(it) { "MusicBotTimeoutJob@${hashCode()} for ${users[musicBot]?.username} failed" }
             }
         }
         musicBotTimeoutJob = null
@@ -332,7 +359,16 @@ private fun Snowflake.isInVoiceAndAlone(): Boolean {
 }
 
 fun <T, S : Comparable<S>> MutableMap<T, MutableSet<S>>.getOrCreate(key: T) = getOrPut(key) { sortedSetOf() }
-fun <T, M : Comparable<M>, MT> MutableMap<T, MutableMap<M, MT>>.getOrCreate(key: T) = getOrPut(key) { sortedMapOf() }
+fun <T, K : Comparable<K>, V> MutableMap<T, MutableMap<K, V>>.getOrCreate(key: T) = getOrPut(key) { sortedMapOf() }
+
+fun <T, S : Set<V>, V> Map<T, S>.getOrEmpty(key: T) = getOrDefault(key, emptySet())
+fun <T, K, V> Map<T, Map<K, V>>.getOrEmpty(key: T) = getOrDefault(key, emptyMap())
+
+fun <T> removedStayedNew(now: Set<T>, last: Set<T>): Triple<List<T>, List<T>, List<T>> {
+    val removed = last.filterNot(now::contains)
+    val (stayed, new) = now.partition(last::contains)
+    return Triple(removed, stayed, new)
+}
 
 /**
  * allows launching a block in a suspend-fun without a CoroutineScope available
