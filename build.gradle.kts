@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     idea
-    kotlin("jvm") version "1.7.0"
+    kotlin("jvm") version "1.7.10"
     id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
@@ -30,9 +30,9 @@ dependencies {
     // Align versions of all Kotlin components
     implementation(platform(kotlin("bom")))
     
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     
-    implementation("dev.kord:kord-core:0.8.0-M12")
+    implementation("dev.kord:kord-core:0.8.0-M15")
     implementation("org.slf4j:slf4j-simple:1.7.36")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
