@@ -64,23 +64,66 @@ suspend fun main(): Unit = coroutineScope {
     
     logger.debug { "creating gateway..." }
     val gateway = DefaultGateway()
+    var connected = false
+    
+    val shutdownHook = Thread {
+        logger.info { "shutting down" }
+        runBlocking {
+            gateway.stop()
+            delay(1000)
+            mainScope.coroutineContext.cancel()
+            while (mainScope.isActive) delay(100L)
+        }
+        logger.info { "bot shut down" }
+    }
+    
     logger.debug { "created gateway" }
     
     logger.debug { "setting up gateway..." }
     with(gateway) {
         on<Ready> {
             logger.info { "started and ready" }
+            Runtime.getRuntime().addShutdownHook(shutdownHook)
+            connected = true
+        }
+        
+        val loggingHandler: suspend Event.() -> Unit = {
+            logger.info { "> " + this::class.simpleName }
+        }
+        
+        on<Resumed>(consumer = loggingHandler)
+        on<Ready>(consumer = loggingHandler)
+        on<Reconnect>(consumer = loggingHandler)
+        on<InvalidSession>(consumer = loggingHandler)
+        on<GuildDelete>(consumer = loggingHandler)
+        on<Close>(consumer = loggingHandler)
+        on<GuildCreate>(consumer = loggingHandler)
+        on<GuildDelete>(consumer = loggingHandler)
+        
+        val cleaner: suspend Event.() -> Unit = {
+            logger.info { "cleaning up" }
             
-            Runtime.getRuntime().addShutdownHook(Thread {
-                logger.info { "shutting down" }
-                runBlocking {
-                    gateway.stop()
-                    delay(1000)
-                    mainScope.coroutineContext.cancel()
-                    while (mainScope.isActive) delay(100L)
-                }
-                logger.info { "bot shut down" }
-            })
+            listOf<MutableMap<*, *>>(
+//                guildNames,
+//                channelNames,
+//                users,
+//                nicknames,
+//                channelsInGuild,
+//                guildForChannel,
+                usersInVoiceChannel,
+                voiceChannelForUser,
+            ).forEach { it.clear() }
+//            afkChannels.clear()
+        }
+        
+        on<Close> {
+            connected = false
+            stopAndRemoveMusicBotTimeoutJob()
+        }
+        
+        on<Resumed> {
+            cleaner()
+            checkMusicBotTimeouts()
         }
         
         on<GuildCreate> {
@@ -332,7 +375,7 @@ suspend fun createAndStartMusicBotTimeoutJob() {
         
         if (voiceChannelForUser[musicBot] == null) return@launch
         literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
-            content = "<@$musicBot>stop"
+            content = "<@$musicBot> stop"
         }
         
         logger.info { "MusicBotTimeoutJob@$hashCode disconnected ${users[musicBot]?.username}" }
