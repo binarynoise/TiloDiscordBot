@@ -32,8 +32,10 @@ dependencies {
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     
-    implementation("dev.kord:kord-core:0.8.0-M15")
-    implementation("org.slf4j:slf4j-simple:1.7.36")
+    implementation("dev.kord:kord-gateway:0.8.0-M15")
+    implementation("dev.kord:kord-rest:0.8.0-M15")
+    
+    implementation("org.slf4j:slf4j-simple:2.0.0")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }
@@ -57,7 +59,7 @@ tasks.withType<ShadowJar> {
     archiveClassifier.set("shadow")
     mergeServiceFiles()
     minimize {
-        exclude(dependency("dev.kord:kord-core:.*"))
+        exclude(dependency("dev.kord:kord-gateway:.*"))
         exclude(dependency("org.slf4j:slf4j-simple:.*"))
     }
 }
