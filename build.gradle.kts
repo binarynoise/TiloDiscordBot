@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     idea
-    kotlin("jvm") version "1.7.10"
+    kotlin("jvm") version "1.8.10"
     id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
@@ -23,7 +23,7 @@ idea {
 
 repositories {
     mavenCentral()
-    maven("https://oss.sonatype.org/content/repositories/snapshots")
+    //maven("https://oss.sonatype.org/content/repositories/snapshots")
 }
 
 dependencies {
@@ -32,10 +32,11 @@ dependencies {
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
     
-    implementation("dev.kord:kord-gateway:0.8.0-M15")
-    implementation("dev.kord:kord-rest:0.8.0-M15")
+    val kordVersion = "0.8.0-M17"
+    implementation("dev.kord:kord-gateway:$kordVersion")
+    implementation("dev.kord:kord-rest:$kordVersion")
     
-    implementation("org.slf4j:slf4j-simple:2.0.0")
+    implementation("org.slf4j:slf4j-simple:2.0.6")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }
