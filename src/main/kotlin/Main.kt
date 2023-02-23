@@ -1,6 +1,5 @@
 import kotlin.coroutines.coroutineContext
 import kotlin.system.exitProcess
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
@@ -29,11 +28,6 @@ val voiceChannelForUser: MutableMap<Snowflake, Snowflake> = mutableMapOf()
 
 val restClient = RestClient(BOT_TOKEN)
 val literalTokenRestClient = LITERAL_BOT_TOKEN?.let { RestClient(LiteralTokenRequestHandler(it)) }
-
-val musicBot = OptionalEnvironmentVariable("MUSIC_BOT") { Snowflake(it.toLong()) }
-val musicBotControlChannel by EnvironmentVariable("MUSIC_BOT_CONTROL_CHANNEL") { Snowflake(it.toLong()) }
-var musicBotTimeoutJob: Job? = null
-val musicBotTimeoutDuration = 30.minutes
 
 suspend fun main(): Unit = coroutineScope {
     val mainScope = this
@@ -64,7 +58,6 @@ suspend fun main(): Unit = coroutineScope {
     
     logger.debug { "creating gateway..." }
     val gateway = DefaultGateway()
-    var connected = false
     
     val shutdownHook = Thread {
         logger.info { "shutting down" }
@@ -84,7 +77,6 @@ suspend fun main(): Unit = coroutineScope {
         on<Ready> {
             logger.info { "started and ready" }
             Runtime.getRuntime().addShutdownHook(shutdownHook)
-            connected = true
         }
         
         val loggingHandler: suspend Event.() -> Unit = {
@@ -99,32 +91,6 @@ suspend fun main(): Unit = coroutineScope {
         on<Close>(consumer = loggingHandler)
         on<GuildCreate>(consumer = loggingHandler)
         on<GuildDelete>(consumer = loggingHandler)
-        
-        val cleaner: suspend Event.() -> Unit = {
-            logger.info { "cleaning up" }
-            
-            listOf<MutableMap<*, *>>(
-//                guildNames,
-//                channelNames,
-//                users,
-//                nicknames,
-//                channelsInGuild,
-//                guildForChannel,
-                usersInVoiceChannel,
-                voiceChannelForUser,
-            ).forEach { it.clear() }
-//            afkChannels.clear()
-        }
-        
-        on<Close> {
-            connected = false
-            stopAndRemoveMusicBotTimeoutJob()
-        }
-        
-        on<Resumed> {
-            cleaner()
-            checkMusicBotTimeouts()
-        }
         
         on<GuildCreate> {
             logger.info { "onGuildCreate ${guild.name}" }
@@ -178,7 +144,6 @@ suspend fun main(): Unit = coroutineScope {
             logger.trace { "onGuildCreate (${guild.name}): voiceState done" }
             
             printUsersInChannels()
-            checkMusicBotTimeouts()
             
             logger.debug { "onGuildCreate (${guild.name}) done" }
         }
@@ -243,8 +208,6 @@ suspend fun main(): Unit = coroutineScope {
                 }
                 printUsersInChannels()
             }
-            
-            checkMusicBotTimeouts()
         }
     }
     logger.debug { "set up gateway" }
@@ -340,65 +303,6 @@ private fun StringBuilder.appendUsers(list: List<Snowflake>, prefix: String, gui
         }
         appendLine()
     }
-}
-
-suspend fun checkMusicBotTimeouts() {
-    if (literalTokenRestClient != null && musicBot != null && musicBot.isInVoiceAndAlone()) {
-        createAndStartMusicBotTimeoutJob()
-    } else {
-        stopAndRemoveMusicBotTimeoutJob()
-    }
-}
-
-suspend fun createAndStartMusicBotTimeoutJob() {
-    if (musicBotTimeoutJob?.isActive == true) return
-    
-    musicBotTimeoutJob = launch {
-        if (musicBot == null) return@launch
-        if (literalTokenRestClient == null) {
-            logger.error { "MUSIC_BOT is set, but LITERAL_BOT_TOKEN is missing" }
-            return@launch
-        }
-        
-        val hashCode = coroutineContext.job.hashCode()
-        logger.info { "MusicBotTimeoutJob@$hashCode for ${users[musicBot]?.username} started" }
-        val halfDuration = musicBotTimeoutDuration / 2
-        
-        delay(halfDuration)
-        
-        val channel = voiceChannelForUser[musicBot] ?: return@launch
-        literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
-            content = "<@$musicBot> ist seit $halfDuration alleine in <#$channel> und wird in $halfDuration gestoppt"
-        }
-        
-        delay(halfDuration)
-        
-        if (voiceChannelForUser[musicBot] == null) return@launch
-        literalTokenRestClient.channel.createMessage(musicBotControlChannel) {
-            content = "<@$musicBot> stop"
-        }
-        
-        logger.info { "MusicBotTimeoutJob@$hashCode disconnected ${users[musicBot]?.username}" }
-    }.apply {
-        invokeOnCompletion {
-            when (it) {
-                null -> logger.info { "MusicBotTimeoutJob@${hashCode()} for ${users[musicBot]?.username} finished" }
-                is CancellationException -> logger.info { "MusicBotTimeoutJob${hashCode()} for ${users[musicBot]?.username} was cancelled" }
-                else -> logger.warn(it) { "MusicBotTimeoutJob@${hashCode()} for ${users[musicBot]?.username} failed" }
-            }
-        }
-        musicBotTimeoutJob = null
-    }
-}
-
-private suspend fun stopAndRemoveMusicBotTimeoutJob() {
-    musicBotTimeoutJob?.cancelAndJoin()
-    musicBotTimeoutJob = null
-}
-
-private fun Snowflake.isInVoiceAndAlone(): Boolean {
-    val voiceChannel = voiceChannelForUser[this] ?: return false
-    return usersInVoiceChannel[voiceChannel]!!.filterNot { it == this }.isEmpty()
 }
 
 fun <T, S : Comparable<S>> MutableMap<T, MutableSet<S>>.getOrCreate(key: T) = getOrPut(key) { sortedSetOf() }
