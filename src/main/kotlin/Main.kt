@@ -92,7 +92,7 @@ suspend fun main(): Unit = coroutineScope {
         on<Close>(consumer = loggingHandler)
         on<GuildCreate>(consumer = loggingHandler)
         on<GuildDelete>(consumer = loggingHandler)
-        
+
 //        on<Event> {
 //            when (this) {
 //                is MessageCreate, is MessageUpdate, is TypingStart, is HeartbeatACK, is MessageDelete, is GuildMembersChunk -> {
@@ -268,6 +268,8 @@ suspend fun printUsersInChannels() {
     voiceChannelForUser.forEach { (userId, channelId) ->
         val guildId = guildForChannel[channelId] ?: return@forEach
         if (afkChannels.contains(channelId)) return@forEach
+        if (users[userId]?.bot.value == true) return@forEach
+        
         tree.getOrCreate(guildId).getOrCreate(channelId).add(userId)
     }
     
