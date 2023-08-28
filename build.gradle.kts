@@ -4,7 +4,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     idea
-    kotlin("jvm") version "1.8.10"
+    kotlin("jvm") version "1.9.10"
     id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
@@ -28,26 +28,21 @@ repositories {
 
 dependencies {
     // Align versions of all Kotlin components
-    implementation(platform(kotlin("bom")))
+    implementation("org.jetbrains.kotlinx:atomicfu:0.22.0")
     
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     
-    val kordVersion = "0.8.0-M17"
+    val kordVersion = "0.10.0"
     implementation("dev.kord:kord-gateway:$kordVersion")
     implementation("dev.kord:kord-rest:$kordVersion")
     
-    implementation("org.slf4j:slf4j-simple:2.0.6")
+    implementation("org.slf4j:slf4j-simple:2.0.7")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = javaVersionNumber
-}
-
-tasks.withType<AbstractCompile> {
-    sourceCompatibility = javaVersionNumber
-    targetCompatibility = javaVersionNumber
+kotlin {
+    jvmToolchain(javaVersionMajor.toInt())
 }
 
 tasks.withType<Jar> {
