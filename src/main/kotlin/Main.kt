@@ -93,6 +93,14 @@ suspend fun main(): Unit = coroutineScope {
         on<GuildCreate>(consumer = loggingHandler)
         on<GuildDelete>(consumer = loggingHandler)
         
+//        on<Event> {
+//            when (this) {
+//                is MessageCreate, is MessageUpdate, is TypingStart, is HeartbeatACK, is MessageDelete, is GuildMembersChunk -> {
+//                }
+//                else -> logger.warn("<- $this")
+//            }
+//        }
+        
         on<GuildCreate> {
             logger.info { "onGuildCreate ${guild.name}" }
             
