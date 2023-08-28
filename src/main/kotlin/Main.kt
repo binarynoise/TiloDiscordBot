@@ -3,6 +3,7 @@ import kotlin.system.exitProcess
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.*
 import dev.kord.common.entity.*
+import dev.kord.common.entity.optional.value
 import dev.kord.gateway.*
 import dev.kord.rest.service.RestClient
 import mu.KotlinLogging
@@ -123,7 +124,7 @@ suspend fun main(): Unit = coroutineScope {
                 val userMap = chunk.data.members.associateWith { it.user.value }.filterValues { it != null } as Map<DiscordGuildMember, DiscordUser>
                 userMap.values.forEach { users[it.id] = it }
                 userMap.forEach { (member, user) ->
-                    val nick = member.nick.value
+                    val nick = member.nick.value ?: user.globalName.value
                     if (nick != null) guildNickNames[user.id] = nick
                 }
                 logger.debug { "onGuildCreate (${guild.name}): got ${userMap.size} users for ${guild.name}" }
@@ -178,16 +179,22 @@ suspend fun main(): Unit = coroutineScope {
             handleChannelCreateOrUpdate(channel)
         }
         
-        fun handleGuildMemberAddOrUpdate(guild: Snowflake, user: DiscordUser?) {
+        suspend fun handleGuildMemberAddOrUpdate(guild: Snowflake, user: DiscordUser?, nick: String?) {
             user ?: return
             logger.debug { "onGuildMemberAdd/Update ${guildNames[guild]} ${user.username}" }
             users[user.id] = user
+            val nick = nick ?: user.globalName.value
+            if (nick != null) {
+                nicknames.getOrCreate(guild)[user.id] = nick
+            } else nicknames.getOrCreate(guild) -= user.id
+            
+            printUsersInChannels()
         }
         on<GuildMemberAdd> {
-            handleGuildMemberAddOrUpdate(member.guildId, member.user.value)
+            handleGuildMemberAddOrUpdate(member.guildId, member.user.value, member.nick.value)
         }
         on<GuildMemberUpdate> {
-            handleGuildMemberAddOrUpdate(member.guildId, member.user)
+            handleGuildMemberAddOrUpdate(member.guildId, member.user, member.nick.value)
         }
         
         on<VoiceStateUpdate> {
