@@ -32,11 +32,11 @@ dependencies {
     
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
     
-    val kordVersion = "0.10.0"
+    val kordVersion = "0.11.1"
     implementation("dev.kord:kord-gateway:$kordVersion")
     implementation("dev.kord:kord-rest:$kordVersion")
     
-    implementation("org.slf4j:slf4j-simple:2.0.7")
+    implementation("org.slf4j:slf4j-simple:2.0.9")
     
     implementation(files("/usr/share/java/gtk-4.1.jar"))
 }

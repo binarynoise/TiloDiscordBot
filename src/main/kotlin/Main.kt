@@ -232,7 +232,7 @@ suspend fun main(): Unit = coroutineScope {
     val gatewayConfiguration = GatewayConfigurationBuilder(
         BOT_TOKEN,
         presence = DiscordPresence(PresenceStatus.Online, false),
-        intents = Intents.nonPrivileged + Intent.GuildMembers,
+        intents = Intents.NON_PRIVILEGED + Intent.GuildMembers,
     ).build()
     gateway.start(gatewayConfiguration)
     logger.info { "stopped gateway" }
