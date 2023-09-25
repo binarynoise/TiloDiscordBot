@@ -312,6 +312,8 @@ private fun StringBuilder.appendUsers(list: List<Snowflake>, prefix: String, gui
         val username = users[it]?.username
         if (nick == null) {
             append(username)
+        } else if (nick.equals(username, true)) {
+            append(nick)
         } else {
             append(nick)
             append(" (")
